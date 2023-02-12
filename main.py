@@ -246,7 +246,7 @@ def train_model(model, args):
             if not os.path.exists('weights'):
                 os.mkdir('weights')
             saveDir = 'weights/model_weights' + '_snr1_' + str(args.snr1) + '_snr2_' + str(args.snr2) \
-                      + '_epochs_' + str(eachbatch) + '_T' + args.T
+                      + '_epochs_' + str(eachbatch) + '_T' + str(args.T)
             torch.save(model.state_dict(), saveDir)
 
 
