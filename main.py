@@ -61,29 +61,29 @@ class AE(nn.Module):
         if self.args.reloc == 1:
             self.total_power_reloc = Power_reallocate(args)
 
-        def power_constraint(self, inputs, isTraining, eachbatch, idx=0):  # Normalize through batch dimension
-            # this_mean = torch.mean(inputs, 0)
-            # this_std  = torch.std(inputs, 0)
-            if isTraining == 1:
-                # training
+    def power_constraint(self, inputs, isTraining, eachbatch, idx=0):  # Normalize through batch dimension
+        # this_mean = torch.mean(inputs, 0)
+        # this_std  = torch.std(inputs, 0)
+        if isTraining == 1:
+            # training
+            this_mean = torch.mean(inputs, 0)
+            this_std = torch.std(inputs, 0)
+        elif isTraining == 0:
+            # test
+            if eachbatch == 0:
                 this_mean = torch.mean(inputs, 0)
                 this_std = torch.std(inputs, 0)
-            elif isTraining == 0:
-                # test
-                if eachbatch == 0:
-                    this_mean = torch.mean(inputs, 0)
-                    this_std = torch.std(inputs, 0)
-                    if not os.path.exists('statistics' + str(args.snr1)+ "_" + str(args.T)):
-                        os.mkdir('statistics' + str(args.snr1)+ "_" + str(args.T))
-                    torch.save(this_mean,'statistics' + str(args.snr1)+ "_" + str(args.T) + "/this_mean" + str(idx))
-                    torch.save(this_std, 'statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
-                    print('this_mean and this_std saved ...')
-                else:
-                    this_mean = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T)+'/this_mean' + str(idx))
-                    this_std = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
+                if not os.path.exists('statistics' + str(args.snr1)+ "_" + str(args.T)):
+                    os.mkdir('statistics' + str(args.snr1)+ "_" + str(args.T))
+                torch.save(this_mean,'statistics' + str(args.snr1)+ "_" + str(args.T) + "/this_mean" + str(idx))
+                torch.save(this_std, 'statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
+                print('this_mean and this_std saved ...')
+            else:
+                this_mean = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T)+'/this_mean' + str(idx))
+                this_std = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
 
-            outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8)
-            return outputs
+        outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8)
+        return outputs
 
     ########### IMPORTANT ##################
     # We use unmodulated bits at encoder
