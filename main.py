@@ -315,7 +315,13 @@ def EvaluateNets(model, args):
             PER = pktErrors / (eachbatch + 1) / args.batchSize
             print('GBAF_FESv1', 'num, BER, errors, PER, errors = ', eachbatch, round(BER.item(), 10), bitErrors.item(),
                   round(PER.item(), 10), pktErrors.item(), )
+             # Calculating the average power
+            power = torch.sum(torch.pow(sent_parities, 2)) / args.batchSize / args.ell / args.T
+            avg_power = (power + avg_power * eachbatch) / (eachbatch + 1)
 
+
+            print('GBAF_FESv1', 'num, BER, errors, PER, errors, avg_power = ', eachbatch, round(BER.item(), 10), bitErrors.item(),
+                  round(PER.item(), 10), pktErrors.item(), avg_power.item() )
     BER = bitErrors.cpu() / (args.numTestbatch * args.batchSize * args.K)
     PER = pktErrors.cpu() / (args.numTestbatch * args.batchSize)
     print(BER)
