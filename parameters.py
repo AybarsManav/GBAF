@@ -42,6 +42,9 @@ def args_parser():
     parser.add_argument('--lr', type=float, default=0.001, help="learning rate")
     parser.add_argument('--wd', type=float, default=0.01, help="weight decay")
     parser.add_argument('--device', type=str, default='cuda:0', help="GPU")
+
+    # Power constraint
+    parser.add_argument('--avg_power', type=float, default=1.0)
     args = parser.parse_args()
 
     return args

@@ -61,7 +61,7 @@ class AE(nn.Module):
         if self.args.reloc == 1:
             self.total_power_reloc = Power_reallocate(args)
 
-    def power_constraint(self, inputs, isTraining, eachbatch, idx=0):  # Normalize through batch dimension
+    def power_constraint(self, inputs, isTraining, eachbatch, avg_power, idx=0):  # Normalize through batch dimension
         # this_mean = torch.mean(inputs, 0)
         # this_std  = torch.std(inputs, 0)
         if isTraining == 1:
@@ -73,16 +73,18 @@ class AE(nn.Module):
             if eachbatch == 0:
                 this_mean = torch.mean(inputs, 0)
                 this_std = torch.std(inputs, 0)
-                if not os.path.exists('statistics' + str(args.snr1)+ "_" + str(args.T)):
-                    os.mkdir('statistics' + str(args.snr1)+ "_" + str(args.T))
-                torch.save(this_mean,'statistics' + str(args.snr1)+ "_" + str(args.T) + "/this_mean" + str(idx))
-                torch.save(this_std, 'statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
+                if not os.path.exists('statistics' + str(args.snr1) + "_" + str(args.T)):
+                    os.mkdir('statistics' + str(args.snr1) + "_" + str(args.T))
+                torch.save(this_mean, 'statistics' + str(args.snr1) + "_" + str(args.T) + "/this_mean" + str(idx))
+                torch.save(this_std, 'statistics' + str(args.snr1) + "_" + str(args.T) + '/this_std' + str(idx))
                 print('this_mean and this_std saved ...')
             else:
-                this_mean = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T)+'/this_mean' + str(idx))
-                this_std = torch.load('statistics' + str(args.snr1)+ "_" + str(args.T) + '/this_std' + str(idx))
-
-        outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8)
+                this_mean = torch.load('statistics' + str(args.snr1) + "_" + str(args.T) + '/this_mean' + str(idx))
+                this_std = torch.load('statistics' + str(args.snr1) + "_" + str(args.T) + '/this_std' + str(idx))
+        if isTraining:
+            outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8) * np.sqrt(avg_power)
+        else:
+            outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8)
         return outputs
 
     ########### IMPORTANT ##################
@@ -91,6 +93,7 @@ class AE(nn.Module):
     def forward(self, eachbatch, bVec_md, fwd_noise_par, fb_noise_par, table=None, isTraining=1):
         ###############################################################################################################################################################
         combined_noise_par = fwd_noise_par + fb_noise_par  # The total noise for parity bits
+        outputs = torch.zeros(args.batchSize, args.ell, args.T)
         for idx in range(self.args.T):  # Go through T interactions
             if idx == 0:  # phase 0
                 src = torch.cat([bVec_md, torch.zeros(self.args.batchSize, self.args.ell, 2 * (self.args.T - 1)).to(
@@ -105,8 +108,10 @@ class AE(nn.Module):
                                      self.args.device)], dim=2)
             ############# Generate the output ###################################################
             output = self.Tmodel(src, None, self.pe)
-            parity = self.power_constraint(output, isTraining, eachbatch, idx)
+            parity = self.power_constraint(output, isTraining, eachbatch, args.avg_power, idx)
             parity = self.total_power_reloc(parity, idx)
+            # Saving the generated parity symbols in a tensor
+            outputs[:, :, idx] = parity.squeeze()
             if idx == 0:
                 parity_fb = parity + combined_noise_par[:, :, idx].unsqueeze(-1)
                 parity_all = parity
@@ -127,7 +132,7 @@ class AE(nn.Module):
                     belief = torch.matmul(decSeq, table)
                 received_wp = torch.cat([received, belief], dim=2)  # received with prior
                 decseq = self.RmodelB(received_wp, None, self.pe)
-        return decSeq
+        return decSeq, outputs
 
 
 ############################################################################################################################################################################
@@ -192,8 +197,11 @@ def train_model(model, args):
             model.load_state_dict(w0)
 
         # feed into model to get predictions
-        preds = model(eachbatch, bVec_md.to(args.device), fwd_noise_par.to(args.device), fb_noise_par.to(args.device),
-                      A_blocks.to(args.device), isTraining=1)
+        preds, outputs = model(eachbatch, bVec_md.to(args.device), fwd_noise_par.to(args.device),
+                               fb_noise_par.to(args.device),
+                               A_blocks.to(args.device), isTraining=1)
+
+        avg_power = avg_power_calculation(outputs)
 
         args.optimizer.zero_grad()
         if args.multclass:
@@ -231,10 +239,11 @@ def train_model(model, args):
         with torch.no_grad():
             probs, decodeds = preds.max(dim=1)
             succRate = sum(decodeds == ys.to(args.device)) / len(ys)
-            print('GBAF_FESv1', 'Idx,lr,snr1,snr2,BS,loss,BER,num=', (
+            print('GBAF_FESv1', 'Idx,lr,snr1,snr2,BS,loss,BER,num, avg_power=', (
                 eachbatch, args.lr, args.snr1, args.snr2, args.batchSize, round(loss.item(), 4),
                 round(1 - succRate.item(), 6),
-                sum(decodeds != ys.to(args.device)).item()))
+                sum(decodeds != ys.to(args.device)).item()),
+                  avg_power.item())
         ####################################################################################
         # if np.mod(eachbatch, args.core * 50) == args.core - 1:
         #     epoch_loss_record.append(loss.item())
@@ -251,7 +260,7 @@ def train_model(model, args):
 
 
 def EvaluateNets(model, args):
-    checkpoint = torch.load(args.saveDir)
+    checkpoint = torch.load(args.saveDir, map_location=args.device)
     # # ======================================================= load weights
     model.load_state_dict(checkpoint)
     model.eval()
@@ -273,6 +282,7 @@ def EvaluateNets(model, args):
     # failbits = torch.zeros(args.K).to(args.device)
     bitErrors = 0
     pktErrors = 0
+    avg_power = 0
     for eachbatch in range(args.numTestbatch):
         if args.embedding == False:
             # BPSK modulated representations 
@@ -295,7 +305,7 @@ def EvaluateNets(model, args):
 
         # feed into model to get predictions
         with torch.no_grad():
-            preds = model(eachbatch, bVec_md.to(args.device), fwd_noise_par.to(args.device),
+            preds, outputs = model(eachbatch, bVec_md.to(args.device), fwd_noise_par.to(args.device),
                           fb_noise_par.to(args.device), A_blocks.to(args.device), isTraining=0)
             if args.multclass:
                 if args.embedding == False:
@@ -307,14 +317,16 @@ def EvaluateNets(model, args):
                 ys = bVec.long().contiguous().view(-1)
             preds1 = preds.contiguous().view(-1, preds.size(-1))
             # print(preds1.shape)
+            avg_power_batch = avg_power_calculation(outputs)
+            avg_power = (avg_power * eachbatch + avg_power_batch) / (eachbatch + 1)
             probs, decodeds = preds1.max(dim=1)
             decisions = decodeds != ys.to(args.device)
             bitErrors += decisions.sum()
             BER = bitErrors / (eachbatch + 1) / args.batchSize / args.ell
             pktErrors += decisions.view(args.batchSize, args.ell).sum(1).count_nonzero()
             PER = pktErrors / (eachbatch + 1) / args.batchSize
-            print('GBAF_FESv1', 'num, BER, errors, PER, errors = ', eachbatch, round(BER.item(), 10), bitErrors.item(),
-                  round(PER.item(), 10), pktErrors.item(), )
+            print('GBAF_FESv1', 'num, BER, errors, PER, errors, avg_power = ', eachbatch, round(BER.item(), 10), bitErrors.item(),
+                  round(PER.item(), 10), pktErrors.item(), avg_power.item())
 
     BER = bitErrors.cpu() / (args.numTestbatch * args.batchSize * args.K)
     PER = pktErrors.cpu() / (args.numTestbatch * args.batchSize)
@@ -326,9 +338,9 @@ def EvaluateNets(model, args):
 if __name__ == '__main__':
     # ======================================================= parse args
     args = args_parser()
-    # args.device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
+    args.device = args.device if torch.cuda.is_available() else 'cpu'
     ########### path for saving model checkpoints ################################
-    args.saveDir = 'weights/model_weights120000'  # path to be saved to
+    args.saveDir = 'D:\pydev\GBAF\model_weights_snr1_0.5_snr2_100.0_epochs_120000_T8'  # path to be saved to
     ################## Model size part ###########################################
     args.d_model_trx = args.heads_trx * args.d_k_trx  # total number of features
     # ======================================================= Initialize the model

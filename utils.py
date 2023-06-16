@@ -69,3 +69,9 @@ class Power_reallocate(torch.nn.Module):
             inputs1 = inputs1 * self.wt2[seq_order] # sequence_wise scaling
 
         return inputs1
+
+def avg_power_calculation(symbols: torch.Tensor):
+    with torch.no_grad():
+        power = torch.sum(torch.pow(symbols, 2)) / symbols.shape[0]
+        avg_power = power / symbols.shape[1] / symbols.shape[2]
+    return avg_power
