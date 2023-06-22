@@ -81,10 +81,9 @@ class AE(nn.Module):
             else:
                 this_mean = torch.load('statistics' + str(args.snr1) + "_" + str(args.T) + '/this_mean' + str(idx))
                 this_std = torch.load('statistics' + str(args.snr1) + "_" + str(args.T) + '/this_std' + str(idx))
-        if isTraining:
-            outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8) * np.sqrt(avg_power)
-        else:
-            outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8)
+        
+        outputs = (inputs - this_mean) * 1.0 / (this_std + 1e-8) * np.sqrt(avg_power)
+        
         return outputs
 
     ########### IMPORTANT ##################
