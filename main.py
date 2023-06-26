@@ -328,6 +328,16 @@ def EvaluateNets(model, args):
             print('GBAF_FESv1', 'num, BER, errors, PER, errors, avg_power = ', eachbatch, round(BER.item(), 10), bitErrors.item(),
                   round(PER.item(), 10), pktErrors.item(), avg_power.item())
 
+            if eachbatch % 5 == 0:
+                metrics = {
+                    'eachbatch': eachbatch,
+                    'PER': round(PER.item(), 12),
+                    'errors': pktErrors.item(),
+                    'average_power': avg_power.item(),
+                }
+                log_test_metrics(metrics, "metrics_" + 'snr1_' + str(args.snr1) + 'snr2_' + str(args.snr2) \
+                                 + 'T_' + str(args.T) + ".txt")
+
     BER = bitErrors.cpu() / (args.numTestbatch * args.batchSize * args.K)
     PER = pktErrors.cpu() / (args.numTestbatch * args.batchSize)
     print(BER)
@@ -340,7 +350,8 @@ if __name__ == '__main__':
     args = args_parser()
     args.device = args.device if torch.cuda.is_available() else 'cpu'
     ########### path for saving model checkpoints ################################
-    args.saveDir = 'D:\pydev\GBAF\model_weights_snr1_0.5_snr2_100.0_epochs_120000_T8'  # path to be saved to
+    args.saveDir = 'weights/model_weights' + '_snr1_' + str(args.snr1) + '_snr2_' + str(args.snr2) \
+                      + '_epochs_' + str(args.totalbatch - 101) + '_T' + str(args.T)  # path to be saved to
     ################## Model size part ###########################################
     args.d_model_trx = args.heads_trx * args.d_k_trx  # total number of features
     # ======================================================= Initialize the model

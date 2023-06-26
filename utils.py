@@ -75,3 +75,7 @@ def avg_power_calculation(symbols: torch.Tensor):
         power = torch.sum(torch.pow(symbols, 2)) / symbols.shape[0]
         avg_power = power / symbols.shape[1] / symbols.shape[2]
     return avg_power
+
+def log_test_metrics(metrics, log_file):
+    with open(log_file, 'a') as f:
+        f.write(f"{metrics}\n")
